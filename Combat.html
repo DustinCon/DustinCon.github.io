@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html>
+  <!--To Do List
+  Pull abilities out of unit objects and than call said ability for each unit
+  Attempt Event Handling
+    Turn abilities into objects with functions that trigger at different times
+	Create an object for each phase of the game
+	  Create an array of the abliity functions at the phase when they should occur
+	  Create a push function that pushes each ability's function to the array
+	Have an init function for each ability that calls the push function of the phase object
+  Give enemy more actions
+	heal?
+	Practice more complex weighting using possible enemy actions
+	  Weighting based on conditions? Like low life use heal, ext.
+	  Enemy less likely to defend succesively
+	    So reweight so base rate is maybe 2. Than decrease it each time defend is chosen and reset to 2 when attack is chosen?
+  Create more abilities like
+	??Engage/Disengage: Add a range stat or possible just an engaged vs. unengaged state and than abilities to influence that
+  Add in the combo concept I was working on using added abilities and knowledge of how to remove and add in new buttons. Use this to make possible action buttons appear
+  Make health bar prettier. Likely by making it with Javascript instead of html
+  Use prototypes to create enemy and player since they share so many values
+  Keep tinkering with:
+    combatLog
+    objects
+	seperating functions clearly
+	  Have a more clearly designed game flow using preperly organized functions
+  -->
+
+<head>
+<!--Start of Back End-->
+
+<!--Add jQuery to code-->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  
+<script async>
+  var game;
+  var round;
+  var healCD = 0;
+  
+  //Creates a random number between 0 and inputed value
+  var rng = function(maxNum) {
+    var result = Math.floor(Math.random() * (parseInt(maxNum) + 1));
+    //console.log('Some RNG. (' + result + ')');
+  return result;
+  };
+  //Logs actions to the combat log
+  var logCombat = function(logText) {
+    $('#roundStart').remove();
+    $('#combatLog' + round).append($('<p class="combatLogText">' + logText + '</p>'));
+  };
+  //Ends the game, preventing further player actions
+  var gameOver = function() {
+    game = 'over';
+    $('#combatLog').prepend('<p>Restart game by pushing the "Input" button at the bottom of the page.</p>');
+    //console.log('Game Ended.');
+  };
+  
+  var lightAttack = function(initiator, target) {
+	logCombat(initiator.name + ' attacks,');
+	var a = rng(initiator.attack);
+	var b = rng(target.defence);
+	var c = a - b;
+	c = Math.max(0, c);
+	logCombat(target.name + ' took ' + c + ' (' + a + ' - ' + b + ') damage,');
+	target.life -= c;
+	logCombat(target.name + ' is now at ' + target.life + '.');
+  };
+  
+  var player = {
+    name: 'Player',
+    masterLife: 15,
+	masterAttack: 3,
+	masterDefence: 0,
+	//presents the player's life to the player
+	paintLife: function() {
+	  $('#playerLifeBar').val(player.life);
+	  $('#playerLifeShown').text(player.life);
+	  //Player health turns green when above 40%
+      if ((this.life/player.maxLife) > 0.4) {
+        $('#playerLifeShown').css('color', 'green');
+      }
+	  //Player dies if life is at zero
+      if (this.life <= 0) {
+	    $('#playerLifeShown').css('color', 'red');
+	    $('#playerLifeShown').text('Dead');
+	    gameOver();
+	    logCombat('Player is Dead.');
+      }
+      //Player health turns red at 40% or lower
+      else if ((this.life/player.maxLife) <= 0.4) {
+        $('#playerLifeShown').css('color', 'red');
+        logCombat('Player is at low life.');
+      }
+	},
+	//presents the player's defence to the player
+	paintDefence: function() {
+	  $('#playerDefenceShown').text(this.defence);
+	},
+	//possible player actions
+	defend: function() {
+      this.defence += 3;
+	  logCombat(this.name + ' defends for 3.');
+    },
+	heal: function() {
+	  healCD = 3;
+	  var a = rng(3) + 1;
+	  this.life += a;
+	  this.life = Math.min(this.maxLife, this.life);
+	  logCombat(this.name + ' heals for ' + a + ', is at ' + this.life + '.');
+	},
+	lightAttack: function(initiator, target) {
+	  lightAttack(initiator, target);
+	},
+	heavyAttack: function(target) {
+      logCombat(this.name + ' attacks,');
+	  target.defence -= 1;
+	  var a = (rng(this.attack) - 1);
+	  var b = rng(target.defence);
+	  var c = a - b;
+	  c = Math.max(0, c);
+	  logCombat(target.name + ' took ' + c + ' (' + a + ' - ' + b + ') damage,');
+	  target.life -= c;
+	  logCombat(target.name + ' is now at ' + target.life + '.');
+    },
+	multiAttack: function(target) {
+	  logCombat(this.name + ' attacks,');
+	  var a = (rng(this.attack) - 1);
+	  var b = rng(target.defence);
+	  var c = a - b;
+	  c = Math.max(0, c);
+	  logCombat(target.name + ' took ' + c + ' (' + a + ' - ' + b + ') damage,');
+	  target.life -= c;
+	  logCombat(target.name + ' is now at ' + target.life + '.');
+	  logCombat(this.name + ' attacks again,');
+	  var a = (rng(this.attack) - 1);
+	  var b = rng(target.defence);
+	  var c = a - b;
+	  c = Math.max(0, c);
+	  logCombat(target.name + ' took ' + c + ' (' + a + ' - ' + b + ') damage,');
+	  target.life -= c;
+	  logCombat(target.name + ' is now at ' + target.life + '.');
+	},
+  };
+	
+  var enemy = {
+    name: 'Enemy',
+	state: 'attacking',
+    masterLife: 15,
+	masterAttack: 4,
+	masterDefence: 0,
+	//presents the enemy's life to the player
+	paintLife: function() {
+	  $('#enemyLifeBar').val(this.life);
+	  $('#enemyLifeShown').text(this.life);
+	  //Enemy health turns green when above 40%
+      if ((this.life/this.maxLife) > 0.4) {
+        $('#enemyLifeShown').css('color', 'green');
+      }
+	  //Enemy dies if life is at zero
+      if (this.life <= 0) {
+	  	$('#enemyLifeShown').css('color', 'red');
+	    $('#enemyLifeShown').text('Dead');
+	    gameOver();
+	    logCombat('Enemy is Dead.');
+      }
+      //Enemy health turns red at 40% or lower
+      else if ((this.life/this.maxLife) <= 0.4) {
+        $('#enemyLifeShown').css('color', 'red');
+    	logCombat('Enemy is at low life.');
+      }
+	},
+	//presents the enemy's defence to the player
+	paintDefence: function() {
+	  $('#enemyDefenceShown').text(this.defence);
+	},
+	defend: function() {
+      this.defence += 3;
+	  logCombat(this.name + ' defends for 3.');
+    },
+	lightAttack: function(initiator, target) {
+	  lightAttack(initiator, target);
+	},
+  };
+  
+  $(document).ready(function() {
+    startGame();
+  });
+  
+  var startGame = function() {
+	//set player to starting stats
+	player.maxLife = player.masterLife;
+    player.life = player.maxLife;
+	player.attack = player.masterAttack;
+	player.defence = player.masterDefence;
+	document.getElementById('playerLifeBar').max = player.masterLife;
+	player.paintLife();
+	player.paintDefence();
+	//set enemy to starting stats
+	enemy.maxLife = enemy.masterLife;
+	enemy.life = enemy.maxLife;
+	enemy.attack = enemy.masterAttack;
+	enemy.defence = enemy.masterDefence;
+	document.getElementById('enemyLifeBar').max = enemy.masterLife;
+	enemy.paintLife();
+	enemy.paintDefence();
+	//presents the current backend values as default values for the input fields
+	$('#playerAttackInput').val(player.masterAttack);
+	$('#playerDefenceInput').val(player.masterDefence);
+	$('#playerLifeInput').val(player.masterLife);
+	$('#enemyAttackInput').val(enemy.masterAttack);
+	$('#enemyDefenceInput').val(enemy.masterDefence);
+	$('#enemyLifeInput').val(enemy.masterLife);
+	//final touches
+	$('#combatLog').empty();
+	game = 'ongoing';
+	round = 0;
+	newRound();
+  };
+  //represents the player turn by allowing them to click buttons
+  var playerTurn = function() {
+    //console.log('Player has buttons.');
+    $('#attackButton').prop('disabled', false);
+    $('#heavyAttackButton').prop('disabled', false);
+	$('#multiAttackButton').prop('disabled', false);
+    $('#defendButton').prop('disabled', false);
+	if (healCD < 1) {
+      $('#healButton').prop('disabled', false);
+	}
+  };
+  var playerAttacks = function() {
+    player.lightAttack(player, enemy);
+	//console.log('Player Light Attacked.');
+    cycleTurn();
+  };
+  var playerHeavyAttacks = function() {
+    player.heavyAttack(enemy);
+	//console.log('Player Heavy Attacked.');
+    cycleTurn();
+  };
+  var playerMultiAttacks = function() {
+    player.multiAttack(enemy);
+	//console.log('Player Multi Attacked.');
+    cycleTurn();
+  };
+  var playerDefends = function() {
+    player.defend();
+	//console.log('Player Defended.');
+    cycleTurn();
+  };
+  var playerHeals = function() {
+    player.heal();
+	//console.log('Player Healed.');
+    cycleTurn();
+  };
+  //Everything needed for player to take another action
+  var cycleTurn = function() {
+    //console.log('Buttons gone.');
+	$('#attackButton').prop('disabled', true);
+    $('#heavyAttackButton').prop('disabled', true);
+    $('#defendButton').prop('disabled', true);
+    $('#healButton').prop('disabled', true);
+	if (enemy.life > 0) {
+	  //Enemy's armour degrades
+	  enemy.defence /= 3;
+      enemy.defence = Math.round(enemy.defence);
+      enemyTurn();
+	}
+	if (enemy.life < 1) {
+	  newRound();
+	}
+  };
+  //Enemy takes a turn
+  var enemyTurn = function() {
+    //console.log('Enemy Turn.');
+    logCombat('<u>Enemy Turn</u>');
+    //Define chooseStance
+    var chooseStance = function() {
+	  newStance = (rng(2) + 1);
+      if (newStance === 3) {
+	    enemy.state = 'defending';
+      }
+	  else {
+	    enemy.state = 'attacking';
+	  }
+      logCombat('Enemy is ' + enemy.state + ' next turn.');
+    };
+    if (enemy.state === 'attacking') {
+	  enemy.lightAttack(enemy, player);
+	  //console.log('Enemy Attacked.');
+    }
+    if (enemy.state === 'defending') {
+	  enemy.defend();
+	  //console.log('Enemy Defended.');
+    }
+    if (game === 'ongoing') {
+	  chooseStance();
+	  newRound();
+    }
+  };
+  //Starts a new round
+  var newRound = function() {
+    paintHealCD = function() {
+	  $('#healCD').empty();
+	  if (healCD > 0) {
+	    $('#healCD').append('(' + healCD + ')');
+	  }
+	};
+	player.paintLife();
+    player.paintDefence();
+    enemy.paintLife();
+    enemy.paintDefence();
+    if (game === 'ongoing') {
+	  //console.log('New Round.');
+      round += 1;
+	  healCD -= 1;
+      player.defence /= 2;
+      player.defence -= 0.1;
+      player.defence = Math.round(player.defence);
+	  paintHealCD();
+	  player.paintDefence();
+	  enemy.paintDefence();
+      $('#combatLog').prepend('<div id=combatLog' + round + ' class="combatLogRound"><p><b>' + 'Round ' + round + '<span id=roundStart> Starting</span></b></p>');
+      //console.log('Game is ' + game + '.');
+      //console.log('Player passed a turn.');
+      playerTurn();
+    }
+  };
+  //Pushes player input to backend
+  var newData = function() {
+    player.masterAttack = $('#playerAttackInput').val();
+    enemy.masterAttack = $('#enemyAttackInput').val();
+    player.masterDefence = $('#playerDefenceInput').val();
+    enemy.masterDefence = $('#enemyDefenceInput').val();
+    player.masterLife = $('#playerLifeInput').val();
+    enemy.masterLife = $('#enemyLifeInput').val();
+    startGame();
+  };
+</script>
+  <!--End of Back End-->
+
+  <title>Combat System</title>
+
+  <!--CSS Styles-->
+  <!--Defining column styles-->
+  <style>
+    {
+      box-sizing: border-box;
+    }
+
+    .row {
+      display: flex;
+    }
+
+    .column {
+      flex: 50%;
+      padding: 10px;
+    }
+
+    .sidebar {
+      flex: 24%;
+      padding: 10px;
+    }
+
+    .notSidebar {
+      flex: 76%;
+      padding: 10px;
+    }
+  </style>
+  <!--Defining Health and Armour display styles-->
+  <style>
+    .lifeValue {
+      color: green;
+      font-size: 30px;
+    }
+	.defenceValue {
+      color: grey;
+      font-size: 30px;
+    }
+	.divider {
+      width: 5px;
+      height: auto;
+      display: inline-block;
+    }
+	</style>
+	<!--Defining combat log styles-->
+	<style>
+	.combatLogRound {
+	  border: 1px solid black;
+	  padding: 5px;
+	}
+	.combatLogText {
+	  line-height: 100%;
+	  margin-top: 0px;
+	  margin-bottom: 0px;
+	  padding: 0px;
+	  margin:9px 0px 9px 0px;
+	  font-family: "Gorgia", serif;
+	}
+	</style>
+  <!--Defining Input Bar Styles-->
+  <style>
+    .inputBar {
+      width: 80px;
+      height: 40px;
+      font-size: 30px;
+      text-align: center;
+  </style>
+</head>
+
+<body>
+
+  <!--Start of Front End-->
+  <center><h1>Simple Combat System</h1></center>
+  <div class="row">
+    <div class="notSidebar">
+      <div class="row">
+        <div class="column">
+          <!--Shows the player's life total-->
+          <center><p>Your Life</p>
+          <span id="playerLifeShown" class="lifeValue"></span>
+		  <span style= "font-size: 30px">
+		  (<span id="playerDefenceShown" class="defenceValue"></span>)
+		  </span>
+		  <br>
+		  <br>
+      	  <progress id="playerLifeBar"></progress></center>
+        </div>
+        <div class="column">
+          <!--Shows the enemie's life total-->
+          <center><p>Enemy Life</p>
+          <span id="enemyLifeShown" class="lifeValue"></span>
+		  <span style= "font-size: 30px">
+		  (<span id="enemyDefenceShown" class="defenceValue"></span>)
+		  </span>
+		  <br>
+		  <br>
+      	  <progress id="enemyLifeBar"></progress></center>
+        </div>
+      </div>
+
+      <!--The action buttons-->
+	  <br>
+      <center><button id="attackButton" onclick="playerAttacks()" type="button" disabled="true">Attack</button>
+	  <div class="divider"></div>
+	  <button id="heavyAttackButton" onclick="playerHeavyAttacks()" type="button" disabled="true">Heavy Attack</button>
+	  <div class="divider"></div>
+	  <button id="multiAttackButton" onclick="playerMultiAttacks()" type="button" disabled="true">Multi-Attack</button></center>
+	  <br>
+	  <center><button id="healButton" onclick="playerHeals()" type="button" disabled="true">Heal<span id="healCD"></span></button>
+	  <div class="divider"></div>
+	  <button id="defendButton" onclick="playerDefends()" type="button" disabled="true">Defend</button></center>
+	  
+	  <br>
+	  <br>
+	  <br>
+	  <br>
+	  <br>
+	  <br>
+	  <br>
+	  
+      <!--Change Back End-->
+      <div class='row'>
+        <div class='column'>
+          <center><form>
+      	    Player Attack<br>
+    	    <input id="playerAttackInput" class="inputBar" type="number" name="playerAttack" size="6"><br></center>
+        </div>
+        <div class='column'>
+          <center><form>
+	        Enemy Attack<br>
+	        <input id="enemyAttackInput" class="inputBar" type="number" name="enemyAttack" size="6"><br></center>
+        </div>
+      </div>
+	  <div class='row'>
+	    <div class='column'>
+          <center><form>
+	        Player Defence<br>
+	        <input id="playerDefenceInput" class="inputBar" type="number" name="playerDefence" size="6"><br></center>
+	    </div>
+		    <div class='column'>
+          <center><form>
+	        Enemy Defence<br>
+	        <input id="enemyDefenceInput" class="inputBar" type="number" name="enemyDefence" size="6"><br></center>
+        </div>
+        </div>
+	  <div class='row'>
+	    <div class='column'>
+          <center><form>
+	        Player Life<br>
+	        <input id="playerLifeInput" class="inputBar" type="number" name="playerLife" size="6"><br></center>
+	    </div>
+		    <div class='column'>
+          <center><form>
+	        Enemy Life<br>
+	        <input id="enemyLifeInput" class="inputBar" type="number" name="enemyLife" size="6"><br></center>
+        </div>
+        </div>
+
+      <!--Pushes new data to Back End-->
+      <center><button id="dataButton" onclick="newData();" type="button">Input (restarts game)</button></center>
+    </div>
+    <!--Combat Log-->
+    <div class="sidebar">
+    <div id="combatLog"></div>
+  </div>
+  </div>
+
+  <!--End of Front End-->
+  </body>
+  </html>
